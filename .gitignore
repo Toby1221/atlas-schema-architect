@@ -1,0 +1,26 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Python test caches
+.pytest_cache/
+
+# Python environment
+.env
+venv/
+
+# Build directories
+build/
+dist/
+
+# Egg info
+*.egg-info/
+
+# IDE Directories
+.vscode/
+.idea/
+
+# Docker related files
+Dockerfile
+docker-compose.yml
+.dockerignore
