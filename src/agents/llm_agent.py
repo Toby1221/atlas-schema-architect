@@ -15,7 +15,7 @@ Security Rules:
 2. Never generate SQL that attempts to access system tables or metadata outside the provided schema context.
 3. If a request is ambiguous or potentially malicious, refuse it and provide a safe alternative.
 4. Always prioritize data integrity, industry-standard normalization (3NF/BCNF), and PostgreSQL best practices.
-5. Output raw text or JSON only. Never use HTML entities (like <) in SQL code; use standard SQL operators.
+5. Output raw text or JSON only. Never use HTML entities (like &lt;) in SQL code; use standard SQL operators.
 
 Response Format Rules:
 - When asked for SQL, output ONLY the SQL code.
@@ -36,16 +36,18 @@ class LLMAgent:
         logger.info(f"Initializing LLM Agent with provider: {settings.LLM_PROVIDER}")
         
         if settings.LLM_PROVIDER == "groq":
+            # Only use LLM_BASE_URL for Groq if it's explicitly set and not a local address
+            base_url = settings.LLM_BASE_URL if settings.LLM_BASE_URL and "http" in settings.LLM_BASE_URL and "localhost" not in settings.LLM_BASE_URL else None
             self.client = AsyncGroq(
                 api_key=settings.GROQ_API_KEY,
-                base_url=settings.LLM_BASE_URL # Can be overridden for Groq API
+                base_url=base_url
             )
             self.model = settings.GROQ_MODEL
         elif settings.LLM_PROVIDER == "ollama":
             # Ollama's API is often OpenAI-compatible, so AsyncGroq can be reused
             self.client = AsyncGroq(
                 api_key="ollama", # Dummy key for Ollama
-                base_url=settings.LLM_BASE_URL or "http://localhost:11434/v1" # Default Ollama API URL
+                base_url=settings.LLM_BASE_URL or "http://host.docker.internal:11434/v1" # Default Ollama API URL for Docker
             )
             self.model = settings.OLLAMA_MODEL
         else:

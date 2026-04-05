@@ -313,14 +313,14 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
     modern_ddl = ""
 
     try:
-        # 1. Get semantic renaming (using new agent)
+        # 1. Phase 2: Semantic Renaming
         rename_mapping = await llm_agent.semantic_rename(cleaned_sql)
         renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
         
-        # 2. Analyze normalization (using new agent)
+        # 2. Phase 3: Normalization Analysis
         norm_report = await llm_agent.analyze_normalization(renamed_sql)
         
-        # 3. Generate final DDL (using new agent)
+        # 3. Phase 4: Modernized DDL Generation
         modern_ddl = await llm_agent.generate_modernized_ddl(renamed_sql, norm_report)
 
         final_ddl = modern_ddl
@@ -348,7 +348,7 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
     except HTTPException: # Re-raise HTTPExceptions as they are already handled
         raise
     except Exception as e: # Catch any other critical pipeline failures
-        logger.error(f"Upstream AI/Pipeline Error: {str(e)}", exc_info=True)
+        logger.error(f"Upstream AI Error ({settings.LLM_PROVIDER}): {str(e)}", exc_info=True)
         error_msg = str(e).lower()
         if "rate limit" in error_msg or "429" in error_msg:
             raise HTTPException(
@@ -357,7 +357,7 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
             )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, 
-            detail=f"The AI provider ({settings.LLM_PROVIDER}) returned an error. Check your connection or API key."
+            detail=f"The AI provider ({settings.LLM_PROVIDER}) returned an error: {str(e)}"
         )
 
 @app.post("/migration", response_model=MigrationResponse)
