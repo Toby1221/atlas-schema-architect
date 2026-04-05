@@ -104,9 +104,16 @@ class AnalysisResponse(BaseModel):
     filename: str
     analysis: str
 
+class GodTable(BaseModel):
+    """Defines a table that violates normalization rules."""
+    table: str
+    reason: str
+    suggested_split: List[str]
+
 class NormalizationReport(BaseModel):
     """Detailed breakdown of table normalization suggestions."""
-    god_tables: List[Dict[str, str]]
+    god_tables: List[GodTable]
+    normalization_score: int
     recommendations: List[str]
 
 class NormalizationResponse(BaseModel):
@@ -125,11 +132,16 @@ class RenameResponse(BaseModel):
     suggestions: Dict[str, str]
     transformed_ddl: str
 
+class TransformationLog(BaseModel):
+    """Structured log of all changes applied during modernization."""
+    renames: Dict[str, str]
+    normalization: NormalizationReport
+
 class ModernizeResponse(BaseModel):
     """Consolidated output of the full modernization pipeline."""
     original_filename: str
     modernized_ddl: str
-    transformations: Dict
+    transformations: TransformationLog
     validation_report: Optional[Dict] = None
 
 class ValidationResponse(BaseModel):
@@ -280,15 +292,21 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
     logger.info(f"Starting modernization pipeline for file: {safe_filename}")
     cleaned_sql = await _read_and_process_sql(file)
     
-    # 1. Get semantic renaming
-    rename_mapping = await groq_agent.semantic_rename(cleaned_sql)
-    renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
-    
-    # 2. Analyze normalization
-    norm_report = await groq_agent.analyze_normalization(renamed_sql)
-    
-    # 3. Generate final DDL
-    modern_ddl = await groq_agent.generate_modernized_ddl(renamed_sql, norm_report)
+    try:
+        # 1. Get semantic renaming
+        rename_mapping = await groq_agent.semantic_rename(cleaned_sql)
+        renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
+        
+        # 2. Analyze normalization
+        norm_report = await groq_agent.analyze_normalization(renamed_sql)
+        
+        # 3. Generate final DDL
+        modern_ddl = await groq_agent.generate_modernized_ddl(renamed_sql, norm_report)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"AI Engine failed to process schema: {str(e)}"
+        )
     
     validation_report = None
     final_ddl = modern_ddl
