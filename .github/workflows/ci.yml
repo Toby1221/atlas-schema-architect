@@ -46,8 +46,9 @@ jobs:
       run: ruff check .
 
     - name: Test with pytest
-      run: python -m pytest
+      run: python -m pytest tests/
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         DATABASE_URL: postgresql://postgres:password@localhost:5432/atlas_test
+        SANDBOX_URL: postgresql://postgres:password@localhost:5432/atlas_test
         PYTHONPATH: .
