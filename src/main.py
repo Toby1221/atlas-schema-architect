@@ -201,6 +201,7 @@ def health_check():
     return {"status": "active", "service": "atlas-schema-architect"}
 
 @app.post("/analyze", response_model=AnalysisResponse)
+@limiter.limit("10/minute")
 async def analyze_schema(file: UploadFile = File(...)):
     """
     Phase 1: Ingestion & Mapping.
@@ -231,6 +232,7 @@ async def validate_and_heal(request: Request, validation_req: ValidationRequest)
     return result
 
 @app.post("/rename", response_model=RenameResponse)
+@limiter.limit("10/minute")
 async def rename_schema(file: UploadFile = File(...)):
     """
     Phase 2: Semantic Renaming.
@@ -251,6 +253,7 @@ async def rename_schema(file: UploadFile = File(...)):
     }
 
 @app.post("/normalize", response_model=NormalizationResponse)
+@limiter.limit("10/minute")
 async def normalize_schema(file: UploadFile = File(...)):
     """
     Phase 3: Normalization & Optimization.
@@ -306,6 +309,7 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
     }
 
 @app.post("/migration", response_model=MigrationResponse)
+@limiter.limit("10/minute")
 async def generate_migration(request: MigrationRequest):
     """
     Automated Script Generation.
