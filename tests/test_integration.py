@@ -4,12 +4,12 @@ from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
 
 from src.main import app
-from src.agents.groq_client import GroqAgent
+from src.agents.llm_agent import LLMAgent # Updated import
 
 # This test requires the Docker services (api, db, sandbox) to be running.
 # Run with: docker-compose --profile testing up -d
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture # Changed to function scope
 async def live_client():
     """Provides an AsyncClient connected to the live FastAPI app."""
     # Using app=app allows unittest.mock to intercept calls within the FastAPI pipeline
@@ -36,7 +36,7 @@ async def test_modernize_with_live_sandbox_and_healing(live_client):
     with patch("src.main.SQLParser.validate_sql_syntax", new_callable=AsyncMock) as mock_validate:
         mock_validate.side_effect = ["PostgreSQL Syntax Error: missing comma", None]
 
-        with patch.object(GroqAgent, 'fix_sql_errors', new_callable=AsyncMock) as mock_fix_sql_errors:
+        with patch.object(LLMAgent, 'fix_sql_errors', new_callable=AsyncMock) as mock_fix_sql_errors: # Updated to LLMAgent
             mock_fix_sql_errors.return_value = corrected_sql
 
             files = {'file': ('malformed.sql', malformed_sql, 'application/sql')}
