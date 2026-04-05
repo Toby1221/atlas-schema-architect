@@ -202,7 +202,7 @@ def health_check():
 
 @app.post("/analyze", response_model=AnalysisResponse)
 @limiter.limit("10/minute")
-async def analyze_schema(file: UploadFile = File(...)):
+async def analyze_schema(request: Request, file: UploadFile = File(...)):
     """
     Phase 1: Ingestion & Mapping.
     Identifies obvious flaws in the legacy schema like missing FKs or God Tables.
@@ -233,7 +233,7 @@ async def validate_and_heal(request: Request, validation_req: ValidationRequest)
 
 @app.post("/rename", response_model=RenameResponse)
 @limiter.limit("10/minute")
-async def rename_schema(file: UploadFile = File(...)):
+async def rename_schema(request: Request, file: UploadFile = File(...)):
     """
     Phase 2: Semantic Renaming.
     Uses LLM to scan cryptic columns and suggest human-readable alternatives.
@@ -254,7 +254,7 @@ async def rename_schema(file: UploadFile = File(...)):
 
 @app.post("/normalize", response_model=NormalizationResponse)
 @limiter.limit("10/minute")
-async def normalize_schema(file: UploadFile = File(...)):
+async def normalize_schema(request: Request, file: UploadFile = File(...)):
     """
     Phase 3: Normalization & Optimization.
     Suggests breaking down oversized tables into relational sub-tables.
@@ -310,11 +310,11 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
 
 @app.post("/migration", response_model=MigrationResponse)
 @limiter.limit("10/minute")
-async def generate_migration(request: MigrationRequest):
+async def generate_migration(request: Request, migration_req: MigrationRequest):
     """
     Automated Script Generation.
     Creates 'INSERT INTO ... SELECT' statements to bridge data from the old 
     structure to the new one, handling type casting automatically.
     """
-    script = await groq_agent.generate_migration_script(request.old_ddl, request.new_ddl)
+    script = await groq_agent.generate_migration_script(migration_req.old_ddl, migration_req.new_ddl)
     return {"migration_script": script}
