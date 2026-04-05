@@ -12,14 +12,15 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any # Import Any
 from pydantic import BaseModel
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi.util import get_remote_address # Keep this for rate limiting
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from .agents.groq_client import GroqAgent
+from .agents.llm_agent import LLMAgent # Updated import
 from .parser.sql_parser import SQLParser
+from pydantic import ValidationError # Import ValidationError
 from .config import settings
 
 # Initialize logging
@@ -49,7 +50,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-groq_agent = GroqAgent()
+llm_agent = LLMAgent() # Updated instantiation
 
 # Mount static files for the UI
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
@@ -108,13 +109,13 @@ class GodTable(BaseModel):
     """Defines a table that violates normalization rules."""
     table: str
     reason: str
-    suggested_split: List[str] = []
+    suggested_split: List[str] = [] # Default to empty list
 
 class NormalizationReport(BaseModel):
     """Detailed breakdown of table normalization suggestions."""
-    god_tables: List[GodTable] = []
-    normalization_score: int = 0
-    recommendations: List[str] = []
+    god_tables: List[GodTable] = [] # Default to empty list
+    normalization_score: int = 0 # Default to 0
+    recommendations: List[str] = [] # Default to empty list
 
 class NormalizationResponse(BaseModel):
     """Phase 3: Identification of table bloat and microservice boundaries."""
@@ -192,7 +193,7 @@ async def _run_self_healing_loop(ddl: str, max_retries: int = 3) -> dict:
         
         logger.warning(f"Validation attempt {i+1} failed: {error}")
         attempts.append({"attempt": i + 1, "error": error})
-        current_ddl = await groq_agent.fix_sql_errors(current_ddl, error)
+        current_ddl = await llm_agent.fix_sql_errors(current_ddl, error)
 
     return {
         "status": "failed", 
@@ -222,9 +223,9 @@ async def analyze_schema(request: Request, file: UploadFile = File(...)):
     Identifies obvious flaws in the legacy schema like missing FKs or God Tables.
     """
     validate_sql_upload(file)
-    safe_filename = os.path.basename(file.filename)
-    cleaned_sql = await _read_and_process_sql(file)
-    report = await groq_agent.analyze_schema(cleaned_sql)
+    safe_filename = os.path.basename(file.filename) # Sanitize filename
+    cleaned_sql = await _read_and_process_sql(file) # Read and clean SQL
+    report = await llm_agent.analyze_schema(cleaned_sql) # Use new agent
     return {"filename": safe_filename, "analysis": report}
 
 @app.post("/validate", response_model=ValidationResponse)
@@ -256,8 +257,8 @@ async def rename_schema(request: Request, file: UploadFile = File(...)):
     safe_filename = os.path.basename(file.filename)
     logger.info(f"Starting rename pipeline for file: {safe_filename}")
     cleaned_sql = await _read_and_process_sql(file)
-    
-    rename_mapping = await groq_agent.semantic_rename(cleaned_sql)
+
+    rename_mapping = await llm_agent.semantic_rename(cleaned_sql) # Use new agent
     transformed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
     
     return {
@@ -277,8 +278,8 @@ async def normalize_schema(request: Request, file: UploadFile = File(...)):
     safe_filename = os.path.basename(file.filename)
     logger.info(f"Analyzing normalization for file: {safe_filename}")
     cleaned_sql = await _read_and_process_sql(file)
-    
-    analysis = await groq_agent.analyze_normalization(cleaned_sql)
+
+    analysis = await llm_agent.analyze_normalization(cleaned_sql) # Use new agent
     return {"filename": safe_filename, "normalization_report": analysis}
 
 @app.post("/modernize", response_model=ModernizeResponse)
@@ -294,39 +295,57 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
     logger.info(f"Starting modernization pipeline for file: {safe_filename}")
     cleaned_sql = await _read_and_process_sql(file)
     
+    # Initialize with default values to ensure Pydantic models are always valid
+    rename_mapping = {}
+    norm_report = NormalizationReport() 
+    modern_ddl = ""
+
     try:
-        # 1. Get semantic renaming
-        rename_mapping = await groq_agent.semantic_rename(cleaned_sql)
-        renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
+        try:
+            # 1. Get semantic renaming (using new agent)
+            rename_mapping = await llm_agent.semantic_rename(cleaned_sql)
+            renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
+            
+            # 2. Analyze normalization (using new agent)
+            norm_report = await llm_agent.analyze_normalization(renamed_sql)
+            
+            # 3. Generate final DDL (using new agent)
+            modern_ddl = await llm_agent.generate_modernized_ddl(renamed_sql, norm_report)
+        except (ValueError, ValidationError) as e: # Catch Pydantic ValidationErrors too
+            logger.error(f"AI Engine failed to process/validate schema: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"AI Engine failed to process schema or returned invalid format: {str(e)}"
+            )
+        except Exception as e: # Catch any other unexpected errors from LLM agent methods
+            logger.error(f"Upstream AI Error during modernization: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="The AI provider (Groq/Ollama) returned an unexpected error. Check your API key/connection."
+            )
         
-        # 2. Analyze normalization
-        norm_report = await groq_agent.analyze_normalization(renamed_sql)
-        
-        # 3. Generate final DDL
-        modern_ddl = await groq_agent.generate_modernized_ddl(renamed_sql, norm_report)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"AI Engine failed to process schema: {str(e)}"
+        validation_report = None
+        final_ddl = modern_ddl
+
+        if validate:
+            validation_report = await _run_self_healing_loop(final_ddl)
+            # Ensure final_ddl points to the healed version
+            final_ddl = validation_report.get("final_ddl", final_ddl)
+
+        return ModernizeResponse( # Return the Pydantic model directly
+            original_filename=safe_filename,
+            modernized_ddl=final_ddl,
+            transformations=TransformationLog(
+                renames=rename_mapping,
+                normalization=norm_report
+            ),
+            validation_report=validation_report
         )
-    
-    validation_report = None
-    final_ddl = modern_ddl
-
-    if validate:
-        validation_report = await _run_self_healing_loop(final_ddl)
-        # Ensure final_ddl points to the healed version
-        final_ddl = validation_report.get("final_ddl", final_ddl)
-
-    return {
-        "original_filename": safe_filename,
-        "modernized_ddl": final_ddl,
-        "transformations": {
-            "renames": rename_mapping,
-            "normalization": norm_report
-        },
-        "validation_report": validation_report
-    }
+    except HTTPException: # Re-raise HTTPExceptions as they are already handled
+        raise
+    except Exception as e: # Catch any other critical pipeline failures
+        logger.error(f"Pipeline Critical Failure: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Pipeline execution crashed: {str(e)}")
 
 @app.post("/migration", response_model=MigrationResponse)
 @limiter.limit("10/minute")
@@ -336,5 +355,5 @@ async def generate_migration(request: Request, migration_req: MigrationRequest):
     Creates 'INSERT INTO ... SELECT' statements to bridge data from the old 
     structure to the new one, handling type casting automatically.
     """
-    script = await groq_agent.generate_migration_script(migration_req.old_ddl, migration_req.new_ddl)
+    script = await llm_agent.generate_migration_script(migration_req.old_ddl, migration_req.new_ddl) # Use new agent
     return {"migration_script": script}

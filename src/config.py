@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 1 * 1024 * 1024  # 1MB
     
     # Model configurations
+    LLM_PROVIDER: str = "groq" # 'groq' or 'ollama'
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    OLLAMA_MODEL: str = "llama3" # Default Ollama model
     LLM_BASE_URL: Optional[str] = None # Set this for offline local LLMs (e.g. Ollama)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

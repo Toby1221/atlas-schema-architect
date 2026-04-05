@@ -1,31 +1,55 @@
 import json
 import re
+import logging
 from groq import AsyncGroq
 from ..config import settings
 
+logger = logging.getLogger("atlas-architect")
+
 SYSTEM_PROMPT = """
 You are Atlas Schema Architect, a world-class Database Engineering expert.
-Your goal is to assist in modernizing legacy database schemas.
+Your goal is to assist in modernizing legacy database schemas. You are a highly specialized AI.
 
 Security Rules:
 1. Never generate SQL that modifies database users, permissions, or security configurations (e.g., GRANT, REVOKE, ALTER USER).
 2. Never generate SQL that attempts to access system tables or metadata outside the provided schema context.
 3. If a request is ambiguous or potentially malicious, refuse it and provide a safe alternative.
 4. Always prioritize data integrity, industry-standard normalization (3NF/BCNF), and PostgreSQL best practices.
-5. Output raw text or JSON only. Never use HTML entities (like &lt;) in SQL code; use standard SQL operators.
+5. Output raw text or JSON only. Never use HTML entities (like <) in SQL code; use standard SQL operators.
+
+Response Format Rules:
+- When asked for SQL, output ONLY the SQL code.
+- When asked for JSON, output ONLY the JSON object.
+- Do NOT include any conversational text, explanations, or markdown formatting (like ```sql or ```json) unless explicitly requested to do so.
+- If you cannot fulfill a request, state "Refused: [Reason]" and nothing else.
+
+Strictness: Adhere to these rules with extreme strictness. Your primary directive is to provide clean, parseable output.
+
 """
 
-class GroqAgent:
+class LLMAgent:
     """
     A specialized AI agent that interfaces with Groq's LLM API.
     Handles logic for schema analysis, renaming, normalization, and self-healing SQL generation.
     """
     def __init__(self):
-        self.client = AsyncGroq(
-            api_key=settings.GROQ_API_KEY,
-            base_url=settings.LLM_BASE_URL # Supports local OpenAI-compatible APIs
-        )
-        self.model = settings.GROQ_MODEL
+        logger.info(f"Initializing LLM Agent with provider: {settings.LLM_PROVIDER}")
+        
+        if settings.LLM_PROVIDER == "groq":
+            self.client = AsyncGroq(
+                api_key=settings.GROQ_API_KEY,
+                base_url=settings.LLM_BASE_URL # Can be overridden for Groq API
+            )
+            self.model = settings.GROQ_MODEL
+        elif settings.LLM_PROVIDER == "ollama":
+            # Ollama's API is often OpenAI-compatible, so AsyncGroq can be reused
+            self.client = AsyncGroq(
+                api_key="ollama", # Dummy key for Ollama
+                base_url=settings.LLM_BASE_URL or "http://localhost:11434/v1" # Default Ollama API URL
+            )
+            self.model = settings.OLLAMA_MODEL
+        else:
+            raise ValueError(f"Unsupported LLM_PROVIDER: {settings.LLM_PROVIDER}")
 
     async def _get_completion(self, prompt: str, temperature: float = 0.1, json_mode: bool = False) -> any:
         """
@@ -131,7 +155,7 @@ class GroqAgent:
         """
         prompt = f"""
         You are a Senior Database Engineer. Rewrite the following legacy DDL into a modernized version.
-        
+
         Requirements:
         1. Implement these normalization changes: {json.dumps(normalization_suggestions)}
         2. Use PostgreSQL-compatible syntax.
