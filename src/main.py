@@ -84,6 +84,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     Catches all unhandled exceptions to prevent internal leakage and 
     ensure a consistent error response format.
     """
+    # Allow specific HTTP exceptions (like 429 Rate Limits or 400 Validation) to pass through
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail}
+        )
+
     logger.error(f"Unhandled error occurred: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -99,6 +106,7 @@ class HealthResponse(BaseModel):
     """Service health status check."""
     status: str
     service: str
+    provider: str
 
 class AnalysisResponse(BaseModel):
     """Phase 1: Results of the initial schema health assessment."""
@@ -213,7 +221,11 @@ def validate_sql_upload(file: UploadFile):
 
 @app.get("/health", response_model=HealthResponse)
 def health_check():
-    return {"status": "active", "service": "atlas-schema-architect"}
+    return {
+        "status": "active", 
+        "service": "atlas-schema-architect",
+        "provider": settings.LLM_PROVIDER
+    }
 
 @app.post("/analyze", response_model=AnalysisResponse)
 @limiter.limit("10/minute")
@@ -301,38 +313,24 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
     modern_ddl = ""
 
     try:
-        try:
-            # 1. Get semantic renaming (using new agent)
-            rename_mapping = await llm_agent.semantic_rename(cleaned_sql) # Await the coroutine
-            renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
-            
-            # 2. Analyze normalization (using new agent)
-            norm_report = await llm_agent.analyze_normalization(renamed_sql)
-            
-            # 3. Generate final DDL (using new agent)
-            modern_ddl = await llm_agent.generate_modernized_ddl(renamed_sql, norm_report)
-        except (ValueError, ValidationError) as e: # Catch Pydantic ValidationErrors too
-            logger.error(f"AI Engine failed to process/validate schema: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"AI Engine failed to process schema or returned invalid format: {str(e)}"
-            )
-        except Exception as e: # Catch any other unexpected errors from LLM agent methods
-            logger.error(f"Upstream AI Error during modernization: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="The AI provider (Groq/Ollama) returned an unexpected error. Check your API key/connection."
-            )
+        # 1. Get semantic renaming (using new agent)
+        rename_mapping = await llm_agent.semantic_rename(cleaned_sql)
+        renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
         
-        validation_report = None
+        # 2. Analyze normalization (using new agent)
+        norm_report = await llm_agent.analyze_normalization(renamed_sql)
+        
+        # 3. Generate final DDL (using new agent)
+        modern_ddl = await llm_agent.generate_modernized_ddl(renamed_sql, norm_report)
+
         final_ddl = modern_ddl
+        validation_report = None
 
         if validate:
             validation_report = await _run_self_healing_loop(final_ddl)
-            # Ensure final_ddl points to the healed version
             final_ddl = validation_report.get("final_ddl", final_ddl)
 
-        return ModernizeResponse( # Return the Pydantic model directly
+        return ModernizeResponse(
             original_filename=safe_filename,
             modernized_ddl=final_ddl,
             transformations=TransformationLog(
@@ -341,11 +339,26 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
             ),
             validation_report=validation_report
         )
+    except (ValueError, ValidationError) as e:
+        logger.error(f"AI Reasoning/Validation Error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"AI Engine failed to parse schema: {str(e)}"
+        )
     except HTTPException: # Re-raise HTTPExceptions as they are already handled
         raise
     except Exception as e: # Catch any other critical pipeline failures
-        logger.error(f"Pipeline Critical Failure: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Pipeline execution crashed: {str(e)}")
+        logger.error(f"Upstream AI/Pipeline Error: {str(e)}", exc_info=True)
+        error_msg = str(e).lower()
+        if "rate limit" in error_msg or "429" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"AI Provider ({settings.LLM_PROVIDER}) rate limit hit. Switch your .env to use the fallback LLM."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, 
+            detail=f"The AI provider ({settings.LLM_PROVIDER}) returned an error. Check your connection or API key."
+        )
 
 @app.post("/migration", response_model=MigrationResponse)
 @limiter.limit("10/minute")

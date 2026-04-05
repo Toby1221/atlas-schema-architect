@@ -28,7 +28,7 @@
             <div class="flex items-center gap-4 text-sm">
                 <span class="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Engine Online
+                    Engine Online (<span x-text="provider" class="uppercase"></span>)
                 </span>
             </div>
         </div>
@@ -131,6 +131,15 @@
 
                     <!-- Tab Content: Human Review -->
                     <div x-show="activeTab === 'Human Review'" class="space-y-4">
+                        <!-- Normalization Score Banner -->
+                        <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 flex justify-between items-center">
+                            <span class="text-sm text-indigo-300 font-medium">Legacy Normalization Score</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-2xl font-bold text-white" x-text="result?.transformations?.normalization?.normalization_score"></span>
+                                <span class="text-xs text-slate-500">/ 10</span>
+                            </div>
+                        </div>
+
                         <!-- God Tables Alert -->
                         <template x-if="result?.transformations?.normalization?.god_tables?.length > 0">
                             <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-6">
@@ -178,7 +187,20 @@
                 result: null,
                 migrationScript: '',
                 activeTab: 'DDL',
+                provider: '...',
                 logs: [],
+                init() {
+                    this.checkHealth();
+                },
+                async checkHealth() {
+                    try {
+                        const res = await fetch('/health');
+                        const data = await res.json();
+                        this.provider = data.provider || 'unknown';
+                    } catch (e) {
+                        this.provider = 'offline';
+                    }
+                },
                 addLog(msg, type = 'info') {
                     this.logs.push({ time: new Date().toLocaleTimeString().split(' ')[0], msg, type });
                     this.$nextTick(() => { this.$refs.console.scrollTop = this.$refs.console.scrollHeight; });
