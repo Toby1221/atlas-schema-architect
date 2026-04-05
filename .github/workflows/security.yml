@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 0 * * 1' # Run weekly
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   sast:
     runs-on: ubuntu-latest
@@ -64,6 +67,7 @@ jobs:
         echo "DATABASE_URL=postgresql://postgres:password@db:5432/postgres" >> .env
         echo "SANDBOX_URL=postgresql://postgres:password@sandbox:5432/postgres" >> .env
         docker-compose --profile testing up -d api db sandbox
+        docker compose --profile testing up -d api db sandbox
     - name: Wait for API health
       run: |
         timeout 60s bash -c 'until curl -s localhost:8000/health; do sleep 2; done'
@@ -73,3 +77,4 @@ jobs:
         target: 'http://localhost:8000'
     - name: Stop Services
       run: docker-compose down
+      run: docker compose down

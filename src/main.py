@@ -10,7 +10,7 @@ import os
 import logging
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, List
 from pydantic import BaseModel
@@ -142,8 +142,7 @@ class MigrationResponse(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def get_ui():
     """Serves the main dashboard interface."""
-    with open("frontend/index.html", "r") as f:
-        return HTMLResponse(content=f.read())
+    return FileResponse("frontend/index.html")
 
 # --- API Logic ---
 
