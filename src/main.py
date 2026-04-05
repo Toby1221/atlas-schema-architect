@@ -12,7 +12,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -108,13 +108,13 @@ class GodTable(BaseModel):
     """Defines a table that violates normalization rules."""
     table: str
     reason: str
-    suggested_split: List[str]
+    suggested_split: List[str] = []
 
 class NormalizationReport(BaseModel):
     """Detailed breakdown of table normalization suggestions."""
-    god_tables: List[GodTable]
-    normalization_score: int
-    recommendations: List[str]
+    god_tables: List[GodTable] = []
+    normalization_score: int = 0
+    recommendations: List[str] = []
 
 class NormalizationResponse(BaseModel):
     """Phase 3: Identification of table bloat and microservice boundaries."""
@@ -149,6 +149,8 @@ class ValidationResponse(BaseModel):
     status: str
     attempts: int
     final_ddl: str
+    errors: List[Dict[str, Any]] = []
+    warning: Optional[str] = None
 
 class ValidationRequest(BaseModel):
     """Input for standalone SQL syntax verification."""
