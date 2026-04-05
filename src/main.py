@@ -8,13 +8,12 @@ and automated sandbox verification.
 
 import os
 import logging
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Request, status
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, List
 from pydantic import BaseModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
