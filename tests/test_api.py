@@ -121,7 +121,11 @@ async def test_modernize_endpoint_mock_with_validation_failure_and_healing(clien
 @pytest.mark.asyncio
 async def test_modernize_endpoint_max_retries_exhausted(client, mock_llm_agent):
     """Verifies that the API fails gracefully when SQL cannot be healed."""
+    # Mock all LLM agent calls to ensure no real network requests are made
+    mock_llm_agent.semantic_rename.return_value = {"old_name": "new_name"}
+    mock_llm_agent.analyze_normalization.return_value = {"god_tables": [], "normalization_score": 0, "recommendations": []}
     mock_llm_agent.generate_modernized_ddl.return_value = "CREATE TABLE error (id INT);"
+    mock_llm_agent.fix_sql_errors.return_value = "CREATE TABLE error (id INT, fixed_col TEXT);" # Mock the fix_sql_errors as well
     
     # Mock validation to always fail
     with patch("src.main.SQLParser.validate_sql_syntax", new_callable=AsyncMock) as mock_validate:

@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+import os # Import os
 from unittest.mock import AsyncMock, patch
 
 from src.main import app
@@ -16,6 +17,10 @@ async def live_client():
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
 
+@pytest.mark.skipif(
+    not os.environ.get("GROQ_API_KEY") or os.environ.get("LLM_PROVIDER") == "ollama",
+    reason="Requires GROQ_API_KEY to be set and LLM_PROVIDER not to be 'ollama' for live LLM calls."
+)
 @pytest.mark.asyncio
 async def test_modernize_with_live_sandbox_and_healing(live_client):
     """

@@ -303,7 +303,7 @@ async def modernize_schema(request: Request, file: UploadFile = File(...), valid
     try:
         try:
             # 1. Get semantic renaming (using new agent)
-            rename_mapping = await llm_agent.semantic_rename(cleaned_sql)
+            rename_mapping = await llm_agent.semantic_rename(cleaned_sql) # Await the coroutine
             renamed_sql = SQLParser.apply_renames(cleaned_sql, rename_mapping)
             
             # 2. Analyze normalization (using new agent)
