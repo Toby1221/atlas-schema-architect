@@ -180,7 +180,13 @@ async def _run_self_healing_loop(ddl: str, max_retries: int = 3) -> dict:
         attempts.append({"attempt": i + 1, "error": error})
         current_ddl = await groq_agent.fix_sql_errors(current_ddl, error)
 
-    return {"status": "failed", "attempts": max_retries, "errors": attempts, "final_ddl": current_ddl}
+    return {
+        "status": "failed", 
+        "attempts": max_retries, 
+        "errors": attempts, 
+        "final_ddl": current_ddl,
+        "warning": "Maximum self-healing retries reached. SQL may still contain syntax errors."
+    }
 
 def validate_sql_upload(file: UploadFile):
     """Performs validation on uploaded files to ensure they are SQL and within size limits."""
