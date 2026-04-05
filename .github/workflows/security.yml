@@ -1,0 +1,75 @@
+name: Security Auditing
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '0 0 * * 1' # Run weekly
+
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Install Security Tools
+      run: pip install bandit safety
+    - name: Run Bandit (Python SAST)
+      run: bandit -r src/ -ll
+    - name: Run Safety (Dependency Check)
+      run: safety check
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Gitleaks Scan
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build Image
+      run: docker build -t atlas-app -f docker/app.Dockerfile .
+    - name: Run Trivy Vulnerability Scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'atlas-app'
+        format: 'table'
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'
+
+  dast:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Start Services for DAST
+      run: |
+        # Create dummy env for CI testing
+        echo "GROQ_API_KEY=mock_key" > .env
+        echo "POSTGRES_PASSWORD=password" >> .env
+        echo "POSTGRES_DB=postgres" >> .env
+        echo "DATABASE_URL=postgresql://postgres:password@db:5432/postgres" >> .env
+        echo "SANDBOX_URL=postgresql://postgres:password@sandbox:5432/postgres" >> .env
+        docker-compose --profile testing up -d api db sandbox
+    - name: Wait for API health
+      run: |
+        timeout 60s bash -c 'until curl -s localhost:8000/health; do sleep 2; done'
+    - name: OWASP ZAP Baseline Scan
+      uses: zaproxy/action-baseline@v0.12.0
+      with:
+        target: 'http://localhost:8000'
+    - name: Stop Services
+      run: docker-compose down

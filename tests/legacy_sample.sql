@@ -1,0 +1,50 @@
+-- Legacy Database Export
+-- Generated: 1999-12-31
+
+CREATE TABLE TBL_USR_01 (
+    U_ID VARCHAR(50) PRIMARY KEY,
+    U_NM_FIRST VARCHAR(100),
+    U_NM_LAST VARCHAR(100),
+    U_PWD_HASH TEXT,
+    U_ADDR_1 VARCHAR(255),
+    U_ADDR_2 VARCHAR(255),
+    U_CITY VARCHAR(100),
+    U_ST_PROV VARCHAR(2),
+    U_ZIP_CODE VARCHAR(20),
+    U_PH_HOME VARCHAR(20),
+    U_PH_WORK VARCHAR(20),
+    U_PH_CELL VARCHAR(20),
+    U_EML_ADDR VARCHAR(255),
+    U_CRT_DT VARCHAR(50), -- Date stored as string
+    U_LST_LG_DT VARCHAR(50), -- Date stored as string
+    IS_ACTV TEXT, -- Boolean stored as 'Y'/'N'
+    PREF_JSON_BLOB TEXT -- Should be JSONB
+);
+
+CREATE TABLE TBL_TX_LOG (
+    TX_ID SERIAL PRIMARY KEY,
+    USR_REF_ID VARCHAR(50), -- Missing Foreign Key to TBL_USR_01
+    TX_AMT DECIMAL(19,4),
+    TX_TYP INT, -- 1=Purchase, 2=Refund, 3=Chargeback
+    TX_TS TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    REM_TXT TEXT
+);
+
+-- Sample Data with inconsistencies
+INSERT INTO TBL_USR_01 (U_ID, U_NM_FIRST, U_NM_LAST, U_CRT_DT, IS_ACTV) 
+VALUES ('USR-001', 'John', 'Doe', '2023-01-15 10:00:00', 'Y');
+
+INSERT INTO TBL_USR_01 (U_ID, U_NM_FIRST, U_NM_LAST, U_CRT_DT, IS_ACTV) 
+VALUES ('USR-002', 'Jane', 'Smith', 'Jan 20, 2023', 'N');
+
+INSERT INTO TBL_TX_LOG (USR_REF_ID, TX_AMT, TX_TYP, REM_TXT) 
+VALUES ('USR-001', 99.99, 1, 'Standard Purchase');
+
+INSERT INTO TBL_TX_LOG (USR_REF_ID, TX_AMT, TX_TYP, REM_TXT) 
+VALUES ('USR-999', 50.00, 2, 'Orphaned Transaction'); -- Testing FK violation logic
+
+CREATE TABLE TBL_META_DATA (
+    ID INT,
+    K VARCHAR(50),
+    V TEXT
+);

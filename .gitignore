@@ -1,17 +1,35 @@
 # Python bytecode
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.db-journal
 
 # Python test caches
 .pytest_cache/
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
 
 # Python environment
 .env
+.venv
 venv/
 
 # Build directories
 build/
 dist/
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# Temporary files
+*.bak
+*.swp
+*~
 
 # Egg info
 *.egg-info/
@@ -20,7 +38,14 @@ dist/
 .vscode/
 .idea/
 
-# Docker related files
-Dockerfile
-docker-compose.yml
-.dockerignore
+# System files
+.DS_Store
+
+# Linting and Security tool caches/reports
+.ruff_cache/
+bandit_report.json
+safety_report.json
+*.sarif
+
+# Docker local overrides
+docker-compose.override.yml

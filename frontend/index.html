@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atlas Schema Architect | Modernize</title>
+    <!-- Offline Assets: Replace CDNs with local paths -->
+    <!-- "/static/assets/tailwind.min.js" -->
+    <script src="https://cdn.tailwindcss.com"></script> 
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        pre { scrollbar-width: thin; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 font-sans antialiased" x-data="app()">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 p-2 rounded-lg">
+                    <i class="fas fa-atlas text-white text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight text-white">Atlas <span class="text-indigo-400">Schema Architect</span></h1>
+            </div>
+            <div class="flex items-center gap-4 text-sm">
+                <span class="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Engine Online
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left: Upload & Controls -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <i class="fas fa-file-upload text-indigo-400"></i> Import Legacy DDL
+                    </h2>
+                    <div 
+                        class="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-indigo-500 transition-colors cursor-pointer"
+                        @click="$refs.fileInput.click()"
+                        @dragover.prevent="dragOver = true"
+                        @dragleave.prevent="dragOver = false"
+                        @drop.prevent="handleDrop($event)"
+                        :class="dragOver ? 'border-indigo-500 bg-indigo-500/5' : ''"
+                    >
+                        <input type="file" x-ref="fileInput" class="hidden" @change="handleFileSelect">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-slate-500 mb-3"></i>
+                        <p class="text-sm text-slate-400" x-text="fileName || 'Drag and drop .sql file or click to browse'"></p>
+                    </div>
+                    
+                    <div class="mt-6 space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer group">
+                            <input type="checkbox" x-model="validate" class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-sm text-slate-300 group-hover:text-white transition-colors">Enable Self-Healing Validation</span>
+                        </label>
+                        <button 
+                            @click="runModernization"
+                            :disabled="!file || loading"
+                            class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all flex items-center justify-center gap-2"
+                        >
+                            <template x-if="loading">
+                                <i class="fas fa-spinner animate-spin"></i>
+                            </template>
+                            <span x-text="loading ? 'Processing...' : 'Run Modernization Pipeline'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pipeline Console -->
+                <div class="bg-black rounded-xl border border-slate-700 p-4 font-mono text-xs overflow-hidden h-64 flex flex-col">
+                    <div class="flex items-center justify-between mb-2 text-slate-500 border-b border-slate-800 pb-2">
+                        <span>PIPELINE_LOG</span>
+                        <i class="fas fa-terminal"></i>
+                    </div>
+                    <div class="flex-1 overflow-y-auto space-y-1" x-ref="console">
+                        <template x-for="log in logs">
+                            <div class="flex gap-2">
+                                <span class="text-slate-600" x-text="log.time"></span>
+                                <span :class="log.type === 'error' ? 'text-red-400' : (log.type === 'success' ? 'text-emerald-400' : 'text-slate-300')" x-text="log.msg"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Results -->
+            <div class="lg:col-span-8">
+                <div x-show="!result && !loading" class="h-full flex flex-col items-center justify-center text-slate-500 space-y-4 py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
+                    <i class="fas fa-diagram-project text-6xl opacity-20"></i>
+                    <p>Upload a schema to view architectural recommendations</p>
+                </div>
+
+                <div x-show="result" x-cloak class="space-y-6">
+                    <!-- Tabs -->
+                    <div class="flex gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700">
+                        <template x-for="tab in ['DDL', 'Migration', 'Human Review']">
+                            <button 
+                                @click="activeTab = tab"
+                                :class="activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'"
+                                class="flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all"
+                                x-text="tab"
+                            ></button>
+                        </template>
+                    </div>
+
+                    <!-- Tab Content: DDL -->
+                    <div x-show="activeTab === 'DDL'" class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                        <div class="bg-slate-900 px-4 py-2 border-b border-slate-700 flex justify-between items-center">
+                            <span class="text-xs font-mono text-slate-400">modernized_schema.sql</span>
+                            <button @click="copy(result.modernized_ddl)" class="text-slate-400 hover:text-white"><i class="fas fa-copy"></i></button>
+                        </div>
+                        <pre class="p-6 text-sm font-mono text-indigo-300 overflow-x-auto" x-text="result.modernized_ddl"></pre>
+                    </div>
+
+                    <!-- Tab Content: Migration -->
+                    <div x-show="activeTab === 'Migration'" class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                        <div class="bg-slate-900 px-4 py-2 border-b border-slate-700 flex justify-between items-center">
+                            <span class="text-xs font-mono text-slate-400">migration_script.sql</span>
+                            <button @click="copy(migrationScript)" class="text-slate-400 hover:text-white"><i class="fas fa-copy"></i></button>
+                        </div>
+                        <pre class="p-6 text-sm font-mono text-emerald-300 overflow-x-auto" x-text="migrationScript"></pre>
+                    </div>
+
+                    <!-- Tab Content: Human Review -->
+                    <div x-show="activeTab === 'Human Review'" class="space-y-4">
+                        <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
+                            <h3 class="text-amber-400 font-semibold mb-3 flex items-center gap-2">
+                                <i class="fas fa-exclamation-triangle"></i> AI Observations & Manual Tasks
+                            </h3>
+                            <ul class="space-y-3">
+                                <template x-for="rec in result.transformations.normalization.recommendations">
+                                    <li class="flex gap-3 text-sm text-slate-300">
+                                        <i class="fas fa-wrench text-amber-500/50 mt-1"></i>
+                                        <span x-text="rec"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function app() {
+            return {
+                file: null,
+                fileName: '',
+                dragOver: false,
+                loading: false,
+                validate: true,
+                result: null,
+                migrationScript: '',
+                activeTab: 'DDL',
+                logs: [],
+                addLog(msg, type = 'info') {
+                    this.logs.push({ time: new Date().toLocaleTimeString().split(' ')[0], msg, type });
+                    this.$nextTick(() => { this.$refs.console.scrollTop = this.$refs.console.scrollHeight; });
+                },
+                handleFileSelect(e) {
+                    this.file = e.target.files[0];
+                    this.fileName = this.file.name;
+                },
+                handleDrop(e) {
+                    this.dragOver = false;
+                    this.file = e.dataTransfer.files[0];
+                    this.fileName = this.file.name;
+                },
+                async runModernization() {
+                    this.loading = true;
+                    this.result = null;
+                    this.migrationScript = '';
+                    this.logs = [];
+                    this.addLog(`Starting pipeline for ${this.fileName}...`);
+                    
+                    const formData = new FormData();
+                    formData.append('file', this.file);
+
+                    const originalDDL = await this.file.text();
+
+                    try {
+                        this.addLog("Running AI Structural Analysis...");
+                        const res = await fetch(`/modernize?validate=${this.validate}`, { method: 'POST', body: formData });
+                        const data = await res.json();
+                        
+                        if (res.ok) {
+                            this.result = data;
+                            this.addLog("Pipeline complete!", "success");
+                            if (data.validation_report) {
+                                this.addLog(`Sandbox validation: ${data.validation_report.status} (${data.validation_report.attempts} attempts)`);
+                            }
+
+                            // Automatically generate migration script
+                            this.addLog("Generating Data Migration Script...");
+                            const migRes = await fetch('/migration', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ old_ddl: originalDDL, new_ddl: data.modernized_ddl })
+                            });
+                            if (migRes.ok) {
+                                const migData = await migRes.json();
+                                this.migrationScript = migData.migration_script;
+                            }
+                        } else {
+                            this.addLog(data.detail || "Pipeline failed", "error");
+                        }
+                    } catch (e) {
+                        this.addLog("Network error: " + e.message, "error");
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                copy(text) {
+                    navigator.clipboard.writeText(text);
+                    alert("Copied to clipboard");
+                }
+            }
+        }
+    </script>
+</body>
+</html>
