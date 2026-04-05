@@ -137,6 +137,7 @@ class GroqAgent:
         2. Use PostgreSQL-compatible syntax.
         3. Ensure all Primary Keys and Foreign Keys are explicitly defined.
         4. Use appropriate modern types (e.g., JSONB for unstructured data, TIMESTAMPTZ for dates).
+        5. Include data integrity constraints: use 'ON DELETE' actions for foreign keys and 'CHECK' constraints for status/type columns where appropriate.
 
         Original DDL:
         {ddl_content}

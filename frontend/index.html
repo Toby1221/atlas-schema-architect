@@ -197,6 +197,9 @@
                             this.addLog("Pipeline complete!", "success");
                             if (data.validation_report) {
                                 this.addLog(`Sandbox validation: ${data.validation_report.status} (${data.validation_report.attempts} attempts)`);
+                                if (data.validation_report.warning) {
+                                    this.addLog(`Warning: ${data.validation_report.warning}`, 'error');
+                                }
                             }
 
                             // Automatically generate migration script
