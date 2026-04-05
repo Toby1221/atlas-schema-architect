@@ -66,7 +66,6 @@ jobs:
         echo "POSTGRES_DB=postgres" >> .env
         echo "DATABASE_URL=postgresql://postgres:password@db:5432/postgres" >> .env
         echo "SANDBOX_URL=postgresql://postgres:password@sandbox:5432/postgres" >> .env
-        docker-compose --profile testing up -d api db sandbox
         docker compose --profile testing up -d api db sandbox
     - name: Wait for API health
       run: |
@@ -76,5 +75,4 @@ jobs:
       with:
         target: 'http://localhost:8000'
     - name: Stop Services
-      run: docker-compose down
       run: docker compose down

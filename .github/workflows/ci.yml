@@ -46,7 +46,6 @@ jobs:
       run: ruff check .
 
     - name: Test with pytest
-      run: pytest
       run: python -m pytest
       env:
         GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
